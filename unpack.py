@@ -8,7 +8,7 @@ import math
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 from featureDict import featureDict
-import uproot
+import uproot3 as uproot
 
 
 
@@ -61,22 +61,27 @@ allBranches = list(set(allBranches)) #remove duplicates
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--input', dest='input',required=True)
+parser.add_argument('--split', dest='split',type=int,default=1)
 parser.add_argument('output', nargs=1)
 args = parser.parse_args()
 
 #f = uproot.open("root://gfe02.grid.hep.ph.ic.ac.uk/pnfs/hep.ph.ic.ac.uk/data/cms/store/user/mkomm/ST/NANOX_210113/TTToHadronic_TuneCP5_PSweights_13TeV-powheg-pythia8-2016/TTToHadronic_TuneCP5_PSweights_13TeV-powheg-pythia8/TTToHadronic_TuneCP5_PSweights_13TeV-powheg-pythia8-2016/210113_210415/0000/nano_102.root")
 f = uproot.open(args.input)
 
-tfwriter = tf.io.TFRecordWriter(
-    args.output[0],
-    options=tf.io.TFRecordOptions(
-        compression_type='GZIP',
-        compression_level = 4,
-        input_buffer_size=100,
-        output_buffer_size=100,
-        mem_level = 8,
+def makeTFWriter(outputName,currentSplit=0,totalSplit=1):
+    if totalSplit>1:
+        outputName = outputName.rsplit(".",1)[0]+"_"+str(currentSplit)+"."+outputName.rsplit(".",1)[1]
+    tfwriter = tf.io.TFRecordWriter(
+        outputName,
+        options=tf.io.TFRecordOptions(
+            compression_type='GZIP',
+            compression_level = 4,
+            input_buffer_size=100,
+            output_buffer_size=100,
+            mem_level = 8,
+        )
     )
-)
+    return tfwriter
 
 def _float_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value.flatten()))
@@ -99,8 +104,18 @@ def make2DArray(data,ievent,indices,nmax,features):
     
 chunkread = 1000
 njets= 0
+currentSplit = 0
+
+tfwriter = makeTFWriter(args.output[0],currentSplit,args.split)
+
 for ibatch,data in enumerate(f["Events"].iterate(allBranches,entrysteps=chunkread)):
+    if ibatch*chunkread>int(1.*len(f["Events"])*(currentSplit+1)/args.split):
+        currentSplit+=1
+        tfwriter.close()
+        tfwriter = makeTFWriter(args.output[0],currentSplit,args.split)
+            
     print (ibatch*chunkread,'/',len(f["Events"]),njets)
+    
     data = {k.decode('utf-8'):v for k,v in data.items()}
     for ievent in range(len(data['global_pt'])):
         for ijet in range(len(data['global_pt'][ievent])):
@@ -152,7 +167,7 @@ for ibatch,data in enumerate(f["Events"].iterate(allBranches,entrysteps=chunkrea
 
             tfwriter.write(example.SerializeToString())
             njets+=1
-
+    
 
 tfwriter.close()
         

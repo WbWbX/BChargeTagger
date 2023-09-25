@@ -362,7 +362,14 @@ class Network():
             self.svInput,
             self.globalInput
         )
-        
+        predictionInv = self.getPrediction(
+            self.cpfInput,-1.*self.cpfChargeInput,
+            self.muonInput,-1.*self.muonChargeInput,
+            self.electronInput,-1.*self.electronChargeInput,
+            self.npfInput,
+            self.svInput,
+            self.globalInput
+        )
         model = tf.keras.Model(
             inputs=[
                 self.cpfInput,self.cpfChargeInput,
@@ -372,7 +379,7 @@ class Network():
                 self.svInput,
                 self.globalInput
             ],
-            outputs = [prediction]
+            outputs = [prediction-predictionInv]
         )
         return model
         
